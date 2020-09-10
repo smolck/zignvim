@@ -1,33 +1,6 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 
-pub fn deserialize(bytes: []const u8) ?[]const u8 {
-    const starting_byte = bytes[0];
-    if ((starting_byte & 0xF0) == 0x90) {
-        // fixarray
-        const len = starting_byte & 0xF;
-        std.debug.warn("thing, {}, {}\n", .{bytes[1] & 0x1F, bytes[1]});
-
-        return bytes[1..len];
-    } else if ((starting_byte & 0xE0) == 0xA0) {
-        // fixstr
-        const len = starting_byte & 0x1F;
-    } else {
-    }
-
-    return null;
-
-    // for (bytes) |byte| {
-    //     switch (byte) {
-    //         // array16
-    //         0xdc => {
-
-    //         },
-    //         else => @compileError("Deserialization not implemented for type")
-    //     }
-    // }
-}
-
 const Value = union(enum) {
     Uint8: u8,
     Uint16: u16,
@@ -48,6 +21,8 @@ const Value = union(enum) {
     String: []const u8,
 
     Array: []const Value,
+
+    Map: *const std.StringHashMap(Value),
 };
 
 pub fn toVal(thing: anytype, comptime T_opt: ?type) Value {
@@ -66,6 +41,7 @@ pub fn toVal(thing: anytype, comptime T_opt: ?type) Value {
         bool => Value { .Bool = thing },
         []const u8 => Value { .String = thing },
         []const Value => Value { .Array = thing },
+        std.StringHashMap(Value) => Value { .Map = &thing },
         @TypeOf(null) => Value { .Null = {} },
         else => @compileLog("Can't serialize type ", thing, " to msgpack.")
     };
@@ -201,149 +177,18 @@ pub fn serializeAndAppend(array: *ArrayList(u8), val: Value) anyerror!void {
             for (xs) |x| {
                 try serializeAndAppend(array, x);
             }
+        },
+        Value.Map => |map| {
+            var iterator = map.*.iterator();
+
+            try startMap(array, map.*.count());
+            while (iterator.next()) |x| {
+                try serializeAndAppend(array, toVal(x.key, null));
+                try serializeAndAppend(array, x.value);
+            }
         }
     }
 }
-
-// fn pushSerialized(array: *ArrayList(u8), comptime T: type, thing: T) anyerror!void {
-// fn pushSerialized(array: *ArrayList(u8), thing: anytype) anyerror!void {
-//     const T = @TypeOf(thing);
-//     switch (T) {
-//         // usize, isize => {
-//             // try self.*.current_serialized.append(thing);
-//         // },
-//         @TypeOf(null) => {
-//         },
-//         u8, i8 => {
-//             if (T == i8) {
-//               try array.*.append(0xd0);
-//             } else {
-//                 try array.*.append(0xcc);
-//             }
-//
-//             try array.*.append(@intCast(u8, @as(i16, thing) & 0xFF));
-//         },
-//         u16, i16 => {
-//             if (T == i16) {
-//               try array.*.append(0xd1);
-//             } else {
-//                 try array.*.append(0xcd);
-//             }
-//
-//             try array.*.append(@intCast(u8, (thing >> 8) & 0xFF));
-//             try array.*.append(@intCast(u8, thing & 0xFF));
-//         },
-//         u32, i32 => {
-//             if (T == i32) {
-//                 try array.*.append(0xd2);
-//             } else {
-//                 try array.*.append(0xce);
-//             }
-//
-//             try array.*.append(@intCast(u8, (thing >> 24) & 0xFF));
-//             try array.*.append(@intCast(u8, (thing >> 16) & 0xFF));
-//             try array.*.append(@intCast(u8, (thing >> 8) & 0xFF));
-//             try array.*.append(@intCast(u8, thing & 0xFF));
-//         },
-//         u64, i64 => {
-//             if (T == i64) {
-//                 try array.*.append(0xd3);
-//             } else {
-//                 try array.*.append(0xcf);
-//             }
-//
-//             try array.*.append(@intCast(u8, (thing >> 56) & 0xFF));
-//             try array.*.append(@intCast(u8, (thing >> 48) & 0xFF));
-//             try array.*.append(@intCast(u8, (thing >> 40) & 0xFF));
-//             try array.*.append(@intCast(u8, (thing >> 32) & 0xFF));
-//             try array.*.append(@intCast(u8, (thing >> 24) & 0xFF));
-//             try array.*.append(@intCast(u8, (thing >> 16) & 0xFF));
-//             try array.*.append(@intCast(u8, (thing >> 8) & 0xFF));
-//             try array.*.append(@intCast(u8, thing & 0xFF));
-//         },
-//         bool => {
-//             if (thing) {
-//                 try array.*.append(0xc3);
-//             } else {
-//                 try array.*.append(0xc2);
-//             }
-//         },
-//         f32, f64 => {
-//             if (T == f64) {
-//                 try array.*.append(0xcb);
-//             } else {
-//                 // f32
-//                 try array.*.append(0xca);
-//             }
-//
-//             // TODO(smolck): Performance? Alternative?
-//             var bytes = std.mem.toBytes(thing);
-//             std.mem.reverse(u8, &bytes);
-//
-//             for (bytes) |byte| {
-//                 std.debug.warn("BYTE: {}\n", .{byte});
-//                 try array.*.append(byte);
-//             }
-//         },
-//         []const u8 => {
-//             if (thing.len < 31) {
-//                 // fixstr
-//                 try array.*.append(0xa0 | @intCast(u8, thing.len));
-//             } else if (thing.len <= std.math.maxInt(u8)) {
-//                 // str8
-//                 try array.*.append(0xd9);
-//                 try array.*.append(@intCast(u8, thing.len));
-//             } else if (thing.len <= std.math.maxInt(u16)) {
-//                 // str16
-//                 try array.*.append(0xd9);
-//
-//                 try array.*.append(@intCast(u8, (thing.len >> 8) & 0xFF));
-//                 try array.*.append(@intCast(u8, thing.len & 0xFF));
-//             } else {
-//                 // assume str32
-//                 try array.*.append(0xdb);
-//
-//                 try array.*.append(@intCast(u8, (thing.len >> 24) & 0xFF));
-//                 try array.*.append(@intCast(u8, (thing.len >> 16) & 0xFF));
-//                 try array.*.append(@intCast(u8, (thing.len >> 8) & 0xFF));
-//                 try array.*.append(@intCast(u8, thing.len & 0xFF));
-//             }
-//
-//             for (thing) |byte| {
-//                 try array.*.append(byte);
-//             }
-//         },
-//         else => @compileError("Serialization not implemented for type!")
-//         // TODO(smolck): I think work still needs to be done to allow for using
-//         // anonymous structs like this, as lists with items of several different
-//         // types. Can't seem to implement it yet.
-//         // See: https://github.com/ziglang/zig/issues/3915, which I think is a
-//         // relevant issue.
-//         // {
-//         //     const info = @typeInfo(T);
-//         //     if (info == .Struct) {
-//         //         try startArray(array, info.Struct.fields.len);
-//         //         inline for (info.Struct.fields) |field| {
-//         //             if (field.default_value) |value| {
-//         //                 try pushSerialized(array, value);
-//         // TODO(smolck): The last line of this `else if` causes a segfault for some reason,
-//         // saying it's a bug in the Zig compiler? Why?
-//         //             } else if (@typeInfo(@TypeOf(field)) == .Struct) {
-//         //                 const info2 = @typeInfo(@TypeOf(field));
-//         //                 std.debug.print("\nINFO: {}\n", .{info2});
-//         //                 try pushSerialized(array, value);
-//         //             } else {
-//         //                 // null
-//         //                 try array.*.append(0xc0);
-//         //                 std.debug.print("NULL: {}\n", .{@typeInfo(@TypeOf(field))});
-//         //             }
-//         //         }
-//         //     } else {
-//         //         std.debug.print("BLAH: {}\n", .{info});
-//         //     }
-//         // }
-//     }
-// }
 
 fn startArray(array: *ArrayList(u8), count: u64) !void {
     if (count <= 15) {
@@ -374,22 +219,138 @@ pub fn serializeList(allocator: *std.mem.Allocator, values: []Value) !ArrayList(
     return item_list;
 }
 
-pub fn startMap(self: *Msgpack, count: u64) !void {
+pub fn startMap(array: *ArrayList(u8), count: u64) !void {
     if (count <= 15) {
-        try self.*.current_serialized.append(0x80 | @intCast(u8, count));
+        try array.*.append(0x80 | @intCast(u8, count));
     } else if (count <= std.math.maxInt(u16)) {
+        try array.*.append(0xde);
+
+        try array.*.append(@intCast(u8, (@intCast(u16, count) >> 8) & 0xFF));
+        try array.*.append(@intCast(u8, count & 0xFF));
+    } else {
+        try array.*.append(0xdf);
+
+        try array.*.append(@intCast(u8, (count >> 24) & 0xFF));
+        try array.*.append(@intCast(u8, (count >> 16) & 0xFF));
+        try array.*.append(@intCast(u8, (count >> 8) & 0xFF));
+        try array.*.append(@intCast(u8, count & 0xFF));
     }
 }
 
+fn deserializeU32(bytes: []const u8) Value {
+    return toVal(@as(u32, bytes[0]) << 24 |
+                 @as(u32, bytes[1]) << 16 |
+                 @as(u32, bytes[2]) << 8  |
+                 @as(u32, bytes[3]), u32);
+}
+
+// TODO(smolck): Maybe make allocator more general (or not explicitly an
+// ArenaAllocator)? Needs to be an ArenaAllocator though basically, because
+// otherwise there will be memory leaks from nested values not getting freed
+// (or any values for that matter).
+pub fn deserialize(allocator: *std.heap.ArenaAllocator, bytes: []const u8) anyerror!Value {
+    const starting_byte = bytes[0];
+    if ((starting_byte & 0xE0) == 0xA0) {
+        // Fixstr
+        const len = starting_byte & 0x1F;
+        return toVal(bytes[1..len+1], []const u8);
+
+    } else if ((starting_byte & 0xF0) == 0x90) {
+        // Fixarray
+        const len = starting_byte & 0xF;
+        var values = try ArrayList(Value).initCapacity(&allocator.*.allocator, len);
+
+        var i: usize = 1;
+        while (i < len+1) : (i += 1) {
+            try values.append(try deserialize(allocator, bytes[i..len+1]));
+        }
+
+        return toVal(values.toOwnedSlice(), []const Value);
+
+    } else if ((starting_byte & 0xE0) == 0xE0) {
+        // TODO(smolck): Negative fixnum
+        // return toVal(@bitCast(i8, @bitCast(u8, @as(u16, starting_byte) - 256)), i8);
+        @compileError("Negative fixnum deserialization not implemented");
+    } else if (starting_byte <= std.math.maxInt(i8)) {
+        // Positive fixnum
+        return toVal(@bitCast(i8, starting_byte), i8);
+    }
+
+    switch (starting_byte) {
+        0xdd => {
+            // Array32
+            var len: usize = deserializeU32(bytes[1..5]).Uint32;
+            var values = try ArrayList(Value).initCapacity(&allocator.*.allocator, len);
+            const new_bytes = bytes[5..len+5];
+
+            var i: usize = 0;
+            while (i < len) : (i += 1) {
+                try values.append(try deserialize(allocator, new_bytes[i..len]));
+            }
+
+            return toVal(values.toOwnedSlice(), []const Value);
+        },
+        else => return Value { .Null = {}}
+    }
+}
 
 test "serializes i64" {
 }
 
+test "deserializes fixarray" {
+    std.testing.log_level = std.log.Level.debug;
+
+    var allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer allocator.deinit();
+
+    const deserialized = try deserialize(&allocator, &[_]u8{
+         221, 0, 0, 0, 3, 1, 2, 3
+    });
+
+    const expected = &[_]Value{
+        toVal(1, i8),
+        toVal(2, i8),
+        toVal(3, i8)
+    };
+
+    var i: usize = 0;
+    while (i < expected.len) : (i += 1) {
+        std.testing.expectEqual(expected[i].Int8, deserialized.Array[i].Int8);
+    }
+}
+
+test "deserializes 'hello'" {
+    std.testing.log_level = std.log.Level.debug;
+
+    var allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer allocator.deinit();
+
+    const val = try deserialize(&allocator, &[_]u8{
+        165, 104, 101, 108, 108, 111
+    });
+
+    var i: usize = 0;
+    const expected_bytes = "hello";
+    while (i < expected_bytes.len) : (i += 1) {
+        std.testing.expectEqual(expected_bytes[i], val.String[i]);
+    }
+}
+
 test "serialization" {
-    var a = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    var test_allocator = std.testing.allocator;
+    var a = std.heap.ArenaAllocator.init(test_allocator);
     defer a.deinit();
 
-    const val = try serializeList(&a.allocator, &[_]Value{
+    var map = std.StringHashMap(Value).init(test_allocator);
+    defer map.deinit();
+
+    try map.put("stuff", toVal(5, i8));
+    try map.put("stuff more", toVal(-200.9877, f32));
+    try map.put("stuff more more", toVal("wassup yo?", []const u8));
+    try map.put("stuff more more more", toVal(false, null));
+
+    const val = try serializeList(test_allocator, &[_]Value{
+        toVal(map, null),
         toVal(64, i8),
         toVal(true, null),
         toVal(832, u16),
@@ -406,9 +367,9 @@ test "serialization" {
     });
     defer val.deinit();
 
-    std.debug.warn("[", .{});
-    for (val.items) |item| {
-        std.debug.warn("{}, ", .{item});
-    }
-    std.debug.warn("]\n", .{});
+    // std.debug.warn("[", .{});
+    // for (val.items) |item| {
+    //     std.debug.warn("{}, ", .{item});
+    // }
+    // std.debug.warn("]\n", .{});
 }
