@@ -9,7 +9,7 @@ pub fn build(b: *Builder) void {
     var main_tests = b.addTest("src/main.zig");
     main_tests.setBuildMode(mode);
 
-    var msgpack_tests = b.addTest("src/msgpack.zig");
+    var msgpack_tests = b.addTest("src/msgpack_test.zig");
     msgpack_tests.setBuildMode(mode);
 
     const test_step = b.step("test", "Run library tests");
