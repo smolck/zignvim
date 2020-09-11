@@ -51,7 +51,10 @@ pub fn serializeAndAppend(array: *ArrayList(u8), val: Value) anyerror!void {
     switch (val) {
         Value.Null => try array.*.append(0xc0),
         Value.Int8 => |x| {
-            try array.*.append(0xd0);
+            if (!(x >= -32)) {
+                // Not a fixint, so add start for serializing an int8
+                try array.*.append(0xd0);
+            }
 
             try array.*.append(@intCast(u8, @as(i16, x) & 0xFF));
         },
@@ -207,7 +210,7 @@ fn startArray(array: *ArrayList(u8), count: u64) !void {
     }
 }
 
-pub fn serializeList(allocator: *std.mem.Allocator, values: []Value) !ArrayList(u8) {
+pub fn serializeList(allocator: *std.mem.Allocator, values: []const Value) !ArrayList(u8) {
     var item_list = ArrayList(u8).init(allocator);
     errdefer item_list.deinit();
 
@@ -235,6 +238,11 @@ pub fn startMap(array: *ArrayList(u8), count: u64) !void {
         try array.*.append(@intCast(u8, (count >> 8) & 0xFF));
         try array.*.append(@intCast(u8, count & 0xFF));
     }
+}
+
+fn deserializeU16(bytes: []const u8) Value {
+    return toVal(@as(u16, bytes[0]) << 8 |
+                 @as(u16, bytes[1]), u16);
 }
 
 fn deserializeU32(bytes: []const u8) Value {
@@ -268,15 +276,27 @@ pub fn deserialize(allocator: *std.heap.ArenaAllocator, bytes: []const u8) anyer
         return toVal(values.toOwnedSlice(), []const Value);
 
     } else if ((starting_byte & 0xE0) == 0xE0) {
-        // TODO(smolck): Negative fixnum
-        // return toVal(@bitCast(i8, @bitCast(u8, @as(u16, starting_byte) - 256)), i8);
-        @compileError("Negative fixnum deserialization not implemented");
+        // Negative fixnum
+        return toVal(@intCast(i8, @intCast(i16, starting_byte) - 256), i8);
     } else if (starting_byte <= std.math.maxInt(i8)) {
         // Positive fixnum
         return toVal(@bitCast(i8, starting_byte), i8);
     }
 
     switch (starting_byte) {
+        0xdc => {
+            // Array16
+            var len: usize = deserializeU16(bytes[1..3]).Uint16;
+            var values = try ArrayList(Value).initCapacity(&allocator.*.allocator, len);
+            const new_bytes = bytes[3..len+3];
+
+            var i: usize = 0;
+            while (i < len) : (i += 1) {
+                try values.append(try deserialize(allocator, new_bytes[i..len]));
+            }
+
+            return toVal(values.toOwnedSlice(), []const Value);
+        },
         0xdd => {
             // Array32
             var len: usize = deserializeU32(bytes[1..5]).Uint32;
@@ -297,7 +317,48 @@ pub fn deserialize(allocator: *std.heap.ArenaAllocator, bytes: []const u8) anyer
 test "serializes i64" {
 }
 
-test "deserializes fixarray" {
+test "deserializes array16" {
+    std.testing.log_level = std.log.Level.debug;
+
+    const expected: Value = toVal(&[_]Value{
+        toVal("hello", []const u8),
+        toVal("goodbye", []const u8),
+        toVal(6, i8),
+    }, []const Value);
+    var serialized = try serializeList(std.testing.allocator, expected.Array);
+    const bytes = serialized.toOwnedSlice();
+
+    // std.log.debug("\nBYTES: [", .{});
+    // for (bytes) |byte| {
+    //     std.log.debug("{}, ", .{byte});
+    // }
+    // std.log.debug("]\n", .{});
+
+    defer std.testing.allocator.free(bytes);
+
+    var allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer allocator.deinit();
+
+    const deserialized = try deserialize(&allocator, bytes);
+
+    std.testing.expectEqual(deserialized, expected);
+}
+
+test "deserializes negative fixnum" {
+    var allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+
+    const deserialized = try deserialize(&allocator, &[_]u8 {
+        // -32 in msgpack, so right at the boundary of what a negative fixint
+        // can be (any less and it would be an int8).
+        224
+    });
+
+    const expected: i8 = -32;
+
+    std.testing.expectEqual(expected, deserialized.Int8);
+}
+
+test "deserializes array32 with fixnums" {
     std.testing.log_level = std.log.Level.debug;
 
     var allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
