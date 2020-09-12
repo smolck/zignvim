@@ -5,7 +5,8 @@ const deserialize = msgpack.deserialize;
 const toVal = msgpack.toVal;
 const serializeList = msgpack.serializeList;
 
-test "serializes f32, and f64" {
+test "serializes and deserializes f32, and f64" {
+    // Serializing
     const expected = &[_]u8{
         148, 202, 68,  13, 248,
         229, 202, 196, 13, 248,
@@ -24,6 +25,16 @@ test "serializes f32, and f64" {
     defer serialized.deinit();
 
     std.testing.expectEqualSlices(u8, serialized.items, expected);
+
+    // Deserializing
+    var allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer allocator.deinit();
+
+    const deserialized = (try deserialize(&allocator, serialized.items)).Array;
+    std.testing.expectEqual(deserialized[0].Float32, 567.889);
+    std.testing.expectEqual(deserialized[1].Float32, -567.889);
+    std.testing.expectEqual(deserialized[2].Float64, 567878.764);
+    std.testing.expectEqual(deserialized[3].Float64, -567878.764);
 }
 
 test "deserializes u8, u16, u32, u64" {

@@ -349,6 +349,18 @@ fn deserializePrivate(allocator: *std.heap.ArenaAllocator, bytes: []const u8) an
                 deserializeSomething64(i64, bytes[1..9]),
             .new_bytes = bytes[9..bytes.len],
         },
+        0xca =>
+        // Float32
+        return DeserializeRet{
+            .deserialized = Value{ .Float32 = @bitCast(f32, deserializeSomething32(u32, bytes[1..5]).Uint32) },
+            .new_bytes = bytes[5..bytes.len],
+        },
+        0xcb =>
+        // Float64
+        return DeserializeRet{
+            .deserialized = Value{ .Float64 = @bitCast(f64, deserializeSomething64(u64, bytes[1..9]).Uint64) },
+            .new_bytes = bytes[9..bytes.len],
+        },
         0xdc => {
             // Array16
             var len: usize = deserializeSomething16(u16, bytes[1..3]).Uint16;
