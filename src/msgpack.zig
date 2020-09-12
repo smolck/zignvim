@@ -125,26 +125,24 @@ pub fn serializeAndAppend(array: *ArrayList(u8), val: Value) anyerror!void {
         Value.Float32 => |x| {
             try array.*.append(0xca);
 
-            var bytes = std.mem.toBytes(x);
-            std.mem.reverse(u8, &bytes);
-
-            for (bytes) |byte| {
-                // std.debug.warn("BYTE: {}\n", .{byte});
-                try array.*.append(byte);
-            }
+            const x_u32 = @bitCast(u32, x);
+            try array.*.append(@intCast(u8, (x_u32 >> 24) & 0xFF));
+            try array.*.append(@intCast(u8, (x_u32 >> 16) & 0xFF));
+            try array.*.append(@intCast(u8, (x_u32 >> 8) & 0xFF));
+            try array.*.append(@intCast(u8, x_u32 & 0xFF));
         },
         Value.Float64 => |x| {
             try array.*.append(0xcb);
 
-            // TODO(smolck): Performance? Alternative?
-            var bytes = std.mem.toBytes(x);
-            std.mem.reverse(u8, &bytes);
-
-            for (bytes) |byte| {
-                // std.debug.warn("BYTE: {}\n", .{byte});
-                try array.*.append(byte);
-            }
-
+            const x_u64 = @bitCast(u64, x);
+            try array.*.append(@intCast(u8, (x_u64 >> 56) & 0xFF));
+            try array.*.append(@intCast(u8, (x_u64 >> 48) & 0xFF));
+            try array.*.append(@intCast(u8, (x_u64 >> 40) & 0xFF));
+            try array.*.append(@intCast(u8, (x_u64 >> 32) & 0xFF));
+            try array.*.append(@intCast(u8, (x_u64 >> 24) & 0xFF));
+            try array.*.append(@intCast(u8, (x_u64 >> 16) & 0xFF));
+            try array.*.append(@intCast(u8, (x_u64 >> 8) & 0xFF));
+            try array.*.append(@intCast(u8, x_u64 & 0xFF));
         },
         Value.String => |x| {
             if (x.len < 31) {
