@@ -28,22 +28,22 @@ pub const Value = union(enum) {
 pub fn toVal(thing: anytype, comptime T_opt: ?type) Value {
     const T = T_opt orelse @TypeOf(thing);
     return switch (T) {
-        u8 => Value { .Uint8 = thing },
-        u16 => Value { .Uint16 = thing },
-        u32 => Value { .Uint32 = thing },
-        u64 => Value { .Uint64 = thing },
-        i8 => Value { .Int8 = thing },
-        i16 => Value { .Int16 = thing },
-        i32 => Value { .Int32 = thing },
-        i64 => Value { .Int64 = thing },
-        f32 => Value { .Float32 = thing },
-        f64 => Value { .Float64 = thing },
-        bool => Value { .Bool = thing },
-        []const u8 => Value { .String = thing },
-        []const Value => Value { .Array = thing },
-        std.StringHashMap(Value) => Value { .Map = &thing },
-        @TypeOf(null) => Value { .Null = {} },
-        else => @compileLog("Can't serialize type ", thing, " to msgpack.")
+        u8 => Value{ .Uint8 = thing },
+        u16 => Value{ .Uint16 = thing },
+        u32 => Value{ .Uint32 = thing },
+        u64 => Value{ .Uint64 = thing },
+        i8 => Value{ .Int8 = thing },
+        i16 => Value{ .Int16 = thing },
+        i32 => Value{ .Int32 = thing },
+        i64 => Value{ .Int64 = thing },
+        f32 => Value{ .Float32 = thing },
+        f64 => Value{ .Float64 = thing },
+        bool => Value{ .Bool = thing },
+        []const u8 => Value{ .String = thing },
+        []const Value => Value{ .Array = thing },
+        std.StringHashMap(Value) => Value{ .Map = &thing },
+        @TypeOf(null) => Value{ .Null = {} },
+        else => @compileLog("Can't serialize type ", thing, " to msgpack."),
     };
 }
 
@@ -93,7 +93,6 @@ pub fn serializeAndAppend(array: *ArrayList(u8), val: Value) anyerror!void {
 
             try array.*.append(@intCast(u8, (x >> 8) & 0xFF));
             try array.*.append(@intCast(u8, x & 0xFF));
-
         },
         Value.Uint32 => |x| {
             try array.*.append(0xce);
@@ -171,7 +170,6 @@ pub fn serializeAndAppend(array: *ArrayList(u8), val: Value) anyerror!void {
             for (x) |byte| {
                 try array.*.append(byte);
             }
-
         },
         Value.Array => |xs| {
             try startArray(array, xs.len);
@@ -187,7 +185,7 @@ pub fn serializeAndAppend(array: *ArrayList(u8), val: Value) anyerror!void {
                 try serializeAndAppend(array, toVal(x.key, null));
                 try serializeAndAppend(array, x.value);
             }
-        }
+        },
     }
 }
 
@@ -240,25 +238,25 @@ pub fn startMap(array: *ArrayList(u8), count: u64) !void {
 
 fn deserializeSomething16(comptime T: type, bytes: []const u8) Value {
     return toVal(@as(T, bytes[0]) << 8 |
-                 @as(T, bytes[1]), T);
+        @as(T, bytes[1]), T);
 }
 
 fn deserializeSomething32(comptime T: type, bytes: []const u8) Value {
     return toVal(@as(T, bytes[0]) << 24 |
-                 @as(T, bytes[1]) << 16 |
-                 @as(T, bytes[2]) << 8  |
-                 @as(T, bytes[3]), T);
+        @as(T, bytes[1]) << 16 |
+        @as(T, bytes[2]) << 8 |
+        @as(T, bytes[3]), T);
 }
 
 fn deserializeSomething64(comptime T: type, bytes: []const u8) Value {
     return toVal(@as(T, bytes[0]) << 56 |
-                 @as(T, bytes[1]) << 48 |
-                 @as(T, bytes[2]) << 40 |
-                 @as(T, bytes[3]) << 32 |
-                 @as(T, bytes[4]) << 24 |
-                 @as(T, bytes[5]) << 16 |
-                 @as(T, bytes[6]) << 8  |
-                 @as(T, bytes[7]), T);
+        @as(T, bytes[1]) << 48 |
+        @as(T, bytes[2]) << 40 |
+        @as(T, bytes[3]) << 32 |
+        @as(T, bytes[4]) << 24 |
+        @as(T, bytes[5]) << 16 |
+        @as(T, bytes[6]) << 8 |
+        @as(T, bytes[7]), T);
 }
 
 const DeserializeRet = struct {
@@ -280,10 +278,9 @@ fn deserializePrivate(allocator: *std.heap.ArenaAllocator, bytes: []const u8) an
         // Fixstr
         const len = starting_byte & 0x1F;
         return DeserializeRet{
-            .deserialized = toVal(bytes[1..len+1], []const u8),
-            .new_bytes = bytes[len+1..bytes.len],
+            .deserialized = toVal(bytes[1 .. len + 1], []const u8),
+            .new_bytes = bytes[len + 1 .. bytes.len],
         };
-
     } else if ((starting_byte & 0xF0) == 0x90) {
         // Fixarray
         const len = starting_byte & 0xF;
@@ -299,69 +296,64 @@ fn deserializePrivate(allocator: *std.heap.ArenaAllocator, bytes: []const u8) an
 
         return DeserializeRet{
             .deserialized = toVal(values.toOwnedSlice(), []const Value),
-            .new_bytes = bytes[len+1..bytes.len]
+            .new_bytes = bytes[len + 1 .. bytes.len],
         };
-
     } else if ((starting_byte & 0xE0) == 0xE0) {
         // Negative fixnum
         return DeserializeRet{
             .deserialized = toVal(@intCast(i8, @intCast(i16, starting_byte) - 256), i8),
-            .new_bytes = bytes[1..bytes.len]
+            .new_bytes = bytes[1..bytes.len],
         };
     } else if (starting_byte <= std.math.maxInt(i8)) {
         // Positive fixnum
         return DeserializeRet{
             .deserialized = toVal(@bitCast(i8, starting_byte), i8),
-            .new_bytes = bytes[1..bytes.len]
+            .new_bytes = bytes[1..bytes.len],
         };
     }
 
     switch (starting_byte) {
         0xcc, // Uint8
-        0xd0  // Int8
+        0xd0 // Int8
         => return DeserializeRet{
-            .deserialized =
-                if (starting_byte == 0xcc)
-                    toVal(bytes[1], u8)
-                else
-                    toVal(@bitCast(i8, bytes[1]), i8),
-            .new_bytes = bytes[2..bytes.len]
+            .deserialized = if (starting_byte == 0xcc)
+                toVal(bytes[1], u8)
+            else
+                toVal(@bitCast(i8, bytes[1]), i8),
+            .new_bytes = bytes[2..bytes.len],
         },
         0xcd, // Uint16
-        0xd1  // Int16
+        0xd1 // Int16
         => return DeserializeRet{
-            .deserialized =
-                if (starting_byte == 0xcd)
-                    deserializeSomething16(u16, bytes[1..3])
-                else
-                    deserializeSomething16(i16, bytes[1..3]),
-            .new_bytes = bytes[3..bytes.len]
+            .deserialized = if (starting_byte == 0xcd)
+                deserializeSomething16(u16, bytes[1..3])
+            else
+                deserializeSomething16(i16, bytes[1..3]),
+            .new_bytes = bytes[3..bytes.len],
         },
         0xce, // Uint32
         0xd2, // Int32
         => return DeserializeRet{
-            .deserialized =
-                if (starting_byte == 0xce)
-                    deserializeSomething32(u32, bytes[1..5])
-                else
-                    deserializeSomething32(i32, bytes[1..5]),
-            .new_bytes = bytes[5..bytes.len]
+            .deserialized = if (starting_byte == 0xce)
+                deserializeSomething32(u32, bytes[1..5])
+            else
+                deserializeSomething32(i32, bytes[1..5]),
+            .new_bytes = bytes[5..bytes.len],
         },
         0xcf, // Uint64
-        0xd3  // Int64
+        0xd3 // Int64
         => return DeserializeRet{
-            .deserialized =
-                if (starting_byte == 0xcf)
-                    deserializeSomething64(u64, bytes[1..9])
-                else
-                    deserializeSomething64(i64, bytes[1..9]),
-            .new_bytes = bytes[9..bytes.len]
+            .deserialized = if (starting_byte == 0xcf)
+                deserializeSomething64(u64, bytes[1..9])
+            else
+                deserializeSomething64(i64, bytes[1..9]),
+            .new_bytes = bytes[9..bytes.len],
         },
         0xdc => {
             // Array16
             var len: usize = deserializeSomething16(u16, bytes[1..3]).Uint16;
             var values = try ArrayList(Value).initCapacity(&allocator.*.allocator, len);
-            var new_bytes = bytes[3..len+3];
+            var new_bytes = bytes[3 .. len + 3];
 
             var i: usize = 0;
             while (i < len) : (i += 1) {
@@ -372,14 +364,14 @@ fn deserializePrivate(allocator: *std.heap.ArenaAllocator, bytes: []const u8) an
 
             return DeserializeRet{
                 .deserialized = toVal(values.toOwnedSlice(), []const Value),
-                .new_bytes = null
+                .new_bytes = null,
             };
         },
         0xdd => {
             // Array32
             var len: usize = deserializeSomething32(u32, bytes[1..5]).Uint32;
             var values = try ArrayList(Value).initCapacity(&allocator.*.allocator, len);
-            var new_bytes = bytes[5..len+5];
+            var new_bytes = bytes[5 .. len + 5];
 
             var i: usize = 0;
             while (i < len) : (i += 1) {
@@ -390,10 +382,10 @@ fn deserializePrivate(allocator: *std.heap.ArenaAllocator, bytes: []const u8) an
 
             return DeserializeRet{
                 .deserialized = toVal(values.toOwnedSlice(), []const Value),
-                .new_bytes = null
+                .new_bytes = null,
             };
         },
-        else => return DeserializeRet{ .deserialized = Value { .Null = {}}, .new_bytes = null }
+        else => return DeserializeRet{ .deserialized = Value{ .Null = {} }, .new_bytes = null },
     }
 }
 

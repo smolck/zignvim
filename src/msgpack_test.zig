@@ -6,13 +6,16 @@ const toVal = msgpack.toVal;
 const serializeList = msgpack.serializeList;
 
 test "serializes f32, and f64" {
-    const expected = &[_]u8 {
-        148, 202, 68, 13, 248,
-        229, 202, 196, 13, 248, 229, 203, 65, 33, 84, 141,
-        135, 43, 2, 12, 203, 193, 33, 84, 141, 135, 43, 2, 12,
+    const expected = &[_]u8{
+        148, 202, 68,  13, 248,
+        229, 202, 196, 13, 248,
+        229, 203, 65,  33, 84,
+        141, 135, 43,  2,  12,
+        203, 193, 33,  84, 141,
+        135, 43,  2,   12,
     };
 
-    const serialized = try msgpack.serializeList(std.testing.allocator, &[_]Value {
+    const serialized = try msgpack.serializeList(std.testing.allocator, &[_]Value{
         toVal(567.889, f32),
         toVal(-567.889, f32),
         toVal(567878.764, f64),
@@ -27,11 +30,11 @@ test "deserializes u8, u16, u32, u64" {
     var allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer allocator.deinit();
 
-    const expected: []const Value = &[_]Value {
+    const expected: []const Value = &[_]Value{
         toVal(8, u8),
         toVal(7699, u16),
         toVal(7870887, u32),
-        toVal(8798787097890789, u64)
+        toVal(8798787097890789, u64),
     };
 
     const byte_list = try msgpack.serializeList(std.testing.allocator, expected);
@@ -72,11 +75,10 @@ test "deserializes fixarray" {
 test "deserializes negative fixnum" {
     var allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const deserialized = try deserialize(&allocator, &[_]u8 {
-        // -32 in msgpack, so right at the boundary of what a negative fixint
-        // can be (any less and it would be an int8).
-        224
-    });
+    const deserialized = try deserialize(&allocator, &[_]u8{
+    // -32 in msgpack, so right at the boundary of what a negative fixint
+    // can be (any less and it would be an int8).
+    224});
 
     const expected: i8 = -32;
 
@@ -90,13 +92,13 @@ test "deserializes array32 with fixnums" {
     defer allocator.deinit();
 
     const deserialized = try deserialize(&allocator, &[_]u8{
-         221, 0, 0, 0, 3, 1, 2, 3
+        221, 0, 0, 0, 3, 1, 2, 3,
     });
 
     const expected = &[_]Value{
         toVal(1, i8),
         toVal(2, i8),
-        toVal(3, i8)
+        toVal(3, i8),
     };
 
     var i: usize = 0;
@@ -112,7 +114,7 @@ test "deserializes 'hello'" {
     defer allocator.deinit();
 
     const val = try deserialize(&allocator, &[_]u8{
-        165, 104, 101, 108, 108, 111
+        165, 104, 101, 108, 108, 111,
     });
 
     var i: usize = 0;
@@ -140,15 +142,15 @@ test "serialization" {
         toVal(64, i8),
         toVal(true, null),
         toVal(832, u16),
-        toVal(&[_]Value {
+        toVal(&[_]Value{
             toVal(false, null),
             toVal("hello there", []const u8),
-            toVal(&[_]Value {
+            toVal(&[_]Value{
                 toVal("Even more nesting", []const u8),
                 toVal(567, i16),
                 toVal(false, null),
-                toVal(null, null)
-            }, []const Value)
+                toVal(null, null),
+            }, []const Value),
         }, []const Value),
     });
     defer val.deinit();
