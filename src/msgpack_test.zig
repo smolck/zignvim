@@ -6,8 +6,6 @@ const toVal = msgpack.toVal;
 const serializeList = msgpack.serializeList;
 
 test "serializes f32, and f64" {
-    std.testing.log_level = std.log.Level.debug;
-
     const expected = &[_]u8 {
         148, 202, 68, 13, 248,
         229, 202, 196, 13, 248, 229, 203, 65, 33, 84, 141,
@@ -22,16 +20,7 @@ test "serializes f32, and f64" {
     });
     defer serialized.deinit();
 
-    std.testing.expectEqualSlices(
-        u8,
-        serialized.items,
-        expected);
-
-    std.debug.print("\n\nBytes: [", .{});
-    for (serialized.items) |byte| {
-        std.debug.print("{}, ", .{byte});
-    }
-    std.debug.print("]\n\n", .{});
+    std.testing.expectEqualSlices(u8, serialized.items, expected);
 }
 
 test "deserializes u8, u16, u32, u64" {
