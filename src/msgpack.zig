@@ -153,7 +153,7 @@ pub fn serializeAndAppend(array: *ArrayList(u8), val: Value) anyerror!void {
                 try array.*.append(@intCast(u8, x.len));
             } else if (x.len <= std.math.maxInt(u16)) {
                 // str16
-                try array.*.append(0xd9);
+                try array.*.append(0xda);
 
                 try array.*.append(@intCast(u8, (x.len >> 8) & 0xFF));
                 try array.*.append(@intCast(u8, x.len & 0xFF));
